@@ -1,11 +1,10 @@
-name: Android CI FOSS
+name: Android CI Market Debug
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -24,34 +23,14 @@ jobs:
           java-package: 'jdk'
           cache: gradle
 
-      - name: Set up Keystore
-        run: |
-          sudo apt update -y || true
-          sudo apt install -y --no-install-recommends coreutils
-          mkdir -p $RUNNER_TEMP/keystores
-          echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > $RUNNER_TEMP/keystores/keystore.jks
+      - name: Build Market Debug APKs
+        run: bash ./gradlew assembleMarketDebug
 
-      - name: Build FOSS APKs
-        run: bash ./gradlew assembleFossRelease
-
-      - name: Sign FOSS APKs
-        run: |
-          ANDROID_SDK_PATH=$ANDROID_HOME/build-tools/35.0.0/apksigner
-          for apk in app/build/outputs/apk/foss/release/*.apk; do
-            $ANDROID_SDK_PATH sign \
-              --ks $RUNNER_TEMP/keystores/keystore.jks \
-              --ks-key-alias ${{ secrets.ALIAS }} \
-              --ks-pass pass:${{ secrets.KEY_STORE_PASS }} \
-              --key-pass pass:${{ secrets.KEY_STORE_PASS }} \
-              --out "$apk" \
-              "$apk"
-          done
-
-      - name: Upload FOSS APKs
+      - name: Upload Market Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Signed FOSS APKs
-          path: app/build/outputs/apk/foss/release/*.apk
+          name: Market Debug Universal APK
+          path: app/build/outputs/apk/market/debug/*universal*.apk
 
-      - name: Delete FOSS APKs
-        run: rm -rf app/build/outputs/apk/foss
+      - name: Delete Market Debug APKs
+        run: rm -rf app/build/outputs/apk/market
