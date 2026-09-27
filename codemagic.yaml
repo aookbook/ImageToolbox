@@ -1,28 +1,95 @@
 workflows:
-  android-foss:
-    name: Android CI FOSS
+  image_toolbox_release:
+
+    name: ImageToolbox FOSS Release
+
     max_build_duration: 120
 
+
     environment:
+
       java: 21
 
+      groups:
+        - android_signing
+
+
     scripts:
-      - name: Check Java version
-        script: |
-          java -version
-          javac -version
 
-      - name: Set Android SDK location
-        script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
-
-      - name: Make Gradle executable
+      - name: Prepare Gradle
         script: |
           chmod +x gradlew
 
-      - name: Build FOSS APKs
+
+      - name: Build FOSS Release APK
         script: |
+          ./gradlew clean
           ./gradlew assembleFossRelease
 
+
+      - name: Locate APK
+        script: |
+          echo "Searching APK..."
+          find . -name "*.apk"
+
+
+      - name: Sign APK
+        script: |
+          set -e
+
+          mkdir -p "$CM_BUILD_DIR/signing"
+
+          echo "$KEYSTORE_BASE64" | base64 --decode \
+          > "$CM_BUILD_DIR/signing/release.jks"
+
+
+          APK=$(find app/build/outputs/apk/foss/release \
+          -name "*.apk" | head -n 1)
+
+
+          if [ -z "$APK" ]; then
+            echo "APK not found"
+            exit 1
+          fi
+
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+          -name apksigner | sort | tail -n 1)
+
+
+          echo "Using:"
+          echo "$APKSIGNER"
+
+
+          "$APKSIGNER" sign \
+          --ks "$CM_BUILD_DIR/signing/release.jks" \
+          --ks-key-alias "$KEY_ALIAS" \
+          --ks-pass "pass:$KEYSTORE_PASSWORD" \
+          --key-pass "pass:$KEY_PASSWORD" \
+          "$APK"
+
+
+
+      - name: Verify Signature
+        script: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+          -name apksigner | sort | tail -n 1)
+
+
+          APK=$(find app/build/outputs/apk/foss/release \
+          -name "*.apk" | head -n 1)
+
+
+          "$APKSIGNER" verify --verbose "$APK"
+
+
+
+      - name: Cleanup Secret Files
+        script: |
+          rm -rf "$CM_BUILD_DIR/signing"
+
+
+
     artifacts:
+
       - app/build/outputs/apk/foss/release/*.apk
